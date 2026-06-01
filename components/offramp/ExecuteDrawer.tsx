@@ -169,13 +169,17 @@ function ExecuteDrawerContent({
 
       // Step 2 — Initiate SEP-24 withdraw
       setStep('initiating');
-      const withdrawResp = await initiateWithdraw(anchor, {
-        assetCode: anchor.assetCode,
-        assetIssuer: anchor.assetIssuer,
-        amount,
-        account: publicKey,
-        jwt: auth.jwt,
-      }, signal);
+      const withdrawResp = await initiateWithdraw(
+        anchor,
+        {
+          assetCode: anchor.assetCode,
+          assetIssuer: anchor.assetIssuer,
+          amount,
+          account: publicKey,
+          jwt: auth.jwt,
+        },
+        signal
+      );
 
       // Step 3 — KYC iframe
       setStep('kyc');
@@ -196,7 +200,12 @@ function ExecuteDrawerContent({
       // Step 4 — Fetch transaction record
       setStep('building');
       const transferServer = anchor.TRANSFER_SERVER_SEP0024!;
-      const record = await getWithdrawTransactionRecord(transferServer, transactionId, auth.jwt, signal);
+      const record = await getWithdrawTransactionRecord(
+        transferServer,
+        transactionId,
+        auth.jwt,
+        signal
+      );
 
       // Step 5 — Build payment
       const tx = await buildWithdrawPayment({
