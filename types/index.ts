@@ -33,6 +33,7 @@ export interface AnchorRate {
   updatedAt: Date;
   /** Discriminates the origin of the rate data. */
   source: 'sep38' | 'sep24-fee' | 'unavailable';
+  expiresAt?: Date | undefined;
   /** Row-level quote lifecycle state. Only meaningful for source === 'sep38'. */
   quoteStatus?: 'firm' | 'expiring' | 'refreshing';
 }
@@ -41,6 +42,7 @@ export interface AnchorRate {
 export interface RateComparison {
   corridorId: string;
   rates: AnchorRate[];
+  pending: { anchorId: string; anchorName: string }[]; // Anchors still resolving
   bestRateId: string; // anchorId of the anchor with the highest totalReceived
 }
 
