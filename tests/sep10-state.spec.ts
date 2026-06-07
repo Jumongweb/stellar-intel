@@ -1,13 +1,20 @@
+// @vitest-environment node
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { Networks, TransactionBuilder, Keypair } from '@stellar/stellar-sdk'
+import { Networks, TransactionBuilder, Keypair, Account, Memo, Operation } from '@stellar/stellar-sdk'
 import {
   fetchSep10Challenge,
-  signSep10Challenge,
-  exchangeSep10Token,
   ChallengeError,
   Sep10AuthError,
 } from '@/lib/stellar/sep10'
 import type { Sep10Challenge } from '@/lib/stellar/sep10'
+
+vi.mock('@stellar/freighter-api', () => {
+  return {
+    getPublicKey: vi.fn(() => 'GCLIENT...'),
+    signTransaction: vi.fn(),
+    isConnected: vi.fn(() => true),
+  };
+})
 
 /**
  * Tests for SEP-10 authentication state machine.
@@ -25,37 +32,37 @@ const WEB_AUTH_ENDPOINT = 'https://anchor.example.com/auth'
 const PUBLIC_KEY = Keypair.random().publicKey()
 const HOME_DOMAIN = 'anchor.example.com'
 
-const VALID_CHALLENGE_XDR =
-  'AAAABQAAAACdIFgKKF2vx6r8VJwDi61SEfA/P6kyxyXjKKwwlsxPkwAAAGQAJ4AaAAAAJQAAAAAAAAAAAAAAAEAAAAC3AAAAAAAAAA0AAAABJNfYx0XwJ6hkX2B70u5T51/4LqAPCdAVRmKy6A0YBMsAAAAAAAAAAQAAAAA'
+let VALID_CHALLENGE_XDR = ''
 
 function createMockChallenge(overrides?: Partial<Sep10Challenge>): Sep10Challenge {
   const keypair = Keypair.random()
   const txBuilder = new TransactionBuilder(
-    {
-      accountId: keypair.publicKey(),
-      sequence: '0',
-      incrementSequenceNumber: false,
-    },
-    { base_fee: 100, networkPassphrase: Networks.PUBLIC_NETWORK_PASSPHRASE }
+    new Account(keypair.publicKey(), '0'),
+    { fee: '100', networkPassphrase: Networks.PUBLIC }
   )
 
   const tx = txBuilder
-    .addMemo({ type: 'id', value: 12345 })
-    .addOperation({
-      type: 'manage_data',
-      dataName: 'challenge',
-      dataValue: Buffer.from('test-challenge'),
-    })
+    .addMemo(Memo.text('12345'))
+    .addOperation(Operation.manageData({
+      name: 'challenge',
+      value: Buffer.from('test-challenge'),
+    }))
     .setTimeout(300)
     .build()
 
+  const xdr = tx.toXDR()
+  VALID_CHALLENGE_XDR = xdr
+
   return {
-    transaction: VALID_CHALLENGE_XDR,
-    network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+    transaction: xdr,
+    network_passphrase: Networks.PUBLIC,
     parsed: tx,
     ...overrides,
   }
 }
+
+// Initialize VALID_CHALLENGE_XDR
+createMockChallenge()
 
 // ─── Mock fetch ───────────────────────────────────────────────────────────────
 
@@ -79,7 +86,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -97,7 +104,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
       ok: true,
       json: async () => ({
         transaction: VALID_CHALLENGE_XDR,
-        network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+        network_passphrase: Networks.PUBLIC,
       }),
     })))
 
@@ -106,7 +113,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
     expect(challenge).toHaveProperty('transaction')
     expect(challenge).toHaveProperty('network_passphrase')
     expect(challenge).toHaveProperty('parsed')
-    expect(challenge.network_passphrase).toBe(Networks.PUBLIC_NETWORK_PASSPHRASE)
+    expect(challenge.network_passphrase).toBe(Networks.PUBLIC)
   })
 
   it('throws ChallengeError with FETCH_FAILED on network error', async () => {
@@ -133,7 +140,7 @@ describe('SEP-10 state machine — challenge fetch', () => {
       ok: true,
       json: async () => ({
         // missing transaction
-        network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+        network_passphrase: Networks.PUBLIC,
       }),
     })))
 
@@ -171,7 +178,7 @@ describe('SEP-10 state machine — sign', () => {
 
     // Mock Freighter signing
     const mockFreighterSign = vi.fn(async (xdr: string) => {
-      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC_NETWORK_PASSPHRASE)
+      const tx = TransactionBuilder.fromXDR(xdr, Networks.PUBLIC)
       tx.addSignature(userKeypair.publicKey(), userKeypair.sign(Buffer.from(xdr)).toString('base64'))
       return tx.toXDR()
     })
@@ -217,7 +224,7 @@ describe('SEP-10 state machine — exchange', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -239,7 +246,7 @@ describe('SEP-10 state machine — exchange', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+            network_passphrase: Networks.PUBLIC,
           }),
         }
       }
@@ -265,7 +272,7 @@ describe('SEP-10 state machine — exchange', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -286,7 +293,7 @@ describe('SEP-10 state machine — exchange', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -312,7 +319,7 @@ describe('SEP-10 state machine — transitions', () => {
           ok: true,
           json: async () => ({
             transaction: VALID_CHALLENGE_XDR,
-            network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+            network_passphrase: Networks.PUBLIC,
           }),
         }
       }
@@ -354,7 +361,7 @@ describe('SEP-10 state machine — transitions', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -393,7 +400,7 @@ describe('SEP-10 state machine — JWT caching', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -414,7 +421,7 @@ describe('SEP-10 state machine — JWT caching', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))
@@ -443,7 +450,7 @@ describe('SEP-10 state machine — JWT caching', () => {
         ok: true,
         json: async () => ({
           transaction: VALID_CHALLENGE_XDR,
-          network_passphrase: Networks.PUBLIC_NETWORK_PASSPHRASE,
+          network_passphrase: Networks.PUBLIC,
         }),
       }
     }))

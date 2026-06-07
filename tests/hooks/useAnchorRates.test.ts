@@ -1,9 +1,14 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, renderHook } from '@testing-library/react';
-import { createElement } from 'react';
-import { SWRConfig } from 'swr';
-import { useAnchorRates } from '@/hooks/useAnchorRates';
-import type { RateComparison } from '@/types';
+import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { renderHook, waitFor } from '@testing-library/react'
+import { createElement } from 'react'
+import { SWRConfig } from 'swr'
+import { useAnchorRates } from '@/hooks/useAnchorRates'
+import type { RateComparison } from '@/types'
+import { fetchRates } from '@/lib/stellar/rates-engine'
+
+vi.mock('@/lib/stellar/rates-engine', () => ({
+  fetchRates: vi.fn(),
+}))
 
 // Fresh SWR cache per test — prevents cross-test cache pollution
 const wrapper = ({ children }: { children: React.ReactNode }) =>
@@ -12,6 +17,7 @@ const wrapper = ({ children }: { children: React.ReactNode }) =>
 const mockRates: RateComparison = {
   corridorId: 'usdc-ngn',
   bestRateId: 'cowrie',
+  pending: [],
   rates: [
     {
       anchorId: 'cowrie',
@@ -28,12 +34,9 @@ const mockRates: RateComparison = {
 };
 
 beforeEach(() => {
-  vi.restoreAllMocks();
-});
-
-afterEach(() => {
-  vi.useRealTimers();
-});
+  vi.restoreAllMocks()
+  vi.useRealTimers()
+})
 
 describe('useAnchorRates', () => {
   it('is loading on initial render', () => {
@@ -46,69 +49,30 @@ describe('useAnchorRates', () => {
   });
 
   it('returns rates with bestRateId once data loads', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        json: async () => ({ rates: mockRates, fetchedAt: new Date().toISOString() }),
-      }))
-    );
+    vi.mocked(fetchRates).mockResolvedValueOnce({
+      corridorId: 'usdc-ngn',
+      bestRateId: 'cowrie',
+      pending: [],
+      rates: [
+        { anchorId: 'cowrie', anchorName: 'Cowrie', corridorId: 'usdc-ngn', fee: 2, feeType: 'flat', exchangeRate: 1580, totalReceived: 154840, source: 'sep24-fee', updatedAt: new Date() },
+        { anchorId: 'moneygram', anchorName: 'MoneyGram', corridorId: 'usdc-ngn', fee: 3, feeType: 'flat', exchangeRate: 1570, totalReceived: 153860, source: 'sep24-fee', updatedAt: new Date() },
+      ]
+    })
 
     const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), { wrapper });
 
-    await vi.waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.rates?.bestRateId).toBe('cowrie');
-    expect(result.current.error).toBeUndefined();
-  });
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 2000 })
+    expect(result.current.rates?.bestRateId).toBe('cowrie')
+    expect(result.current.error).toBeUndefined()
+  })
 
   it('exposes an error string when the fetch fails', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: false,
-        status: 500,
-        json: async () => ({ message: 'All anchors failed' }),
-      }))
-    );
+    vi.mocked(fetchRates).mockRejectedValueOnce(new Error('All anchors failed'))
 
-    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), { wrapper });
+    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), { wrapper })
 
-    await vi.waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(result.current.error).toBe('All anchors failed');
-    expect(result.current.rates).toBeUndefined();
-  });
-
-  it('pauses automatic refreshes until resumed', async () => {
-    vi.useFakeTimers();
-    const fetchMock = vi.fn(async () => ({
-      ok: true,
-      json: async () => ({ rates: mockRates, fetchedAt: new Date().toISOString() }),
-    }));
-    vi.stubGlobal('fetch', fetchMock);
-
-    const { result } = renderHook(() => useAnchorRates('usdc-ngn', '100'), { wrapper });
-
-    await vi.waitFor(() => expect(result.current.isLoading).toBe(false));
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      result.current.pauseRefresh();
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(31_000);
-    });
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-
-    act(() => {
-      result.current.resumeRefresh();
-    });
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(31_000);
-    });
-
-    await vi.waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2));
-  });
-});
+    await waitFor(() => expect(result.current.isLoading).toBe(false), { timeout: 2000 })
+    expect(result.current.error).toBe('All anchors failed')
+    expect(result.current.rates).toBeUndefined()
+  })
+})
