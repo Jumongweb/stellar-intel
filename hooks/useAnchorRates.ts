@@ -1,26 +1,11 @@
-import useSWR from "swr";
-import type { ApiRatesResponse, RateComparison } from "@/types";
-import { useState, useCallback, useEffect, useRef } from "react";
-
-type RefreshControl = {
-  pauseRefresh: () => void;
-  resumeRefresh: () => void;
-};
-
-let activeRefreshControl: RefreshControl | null = null;
-
-export function pauseAnchorRatesRefresh() {
-  activeRefreshControl?.pauseRefresh();
-}
-
-export function resumeAnchorRatesRefresh() {
-  activeRefreshControl?.resumeRefresh();
-}
+import useSWR from 'swr';
+import type { ApiRatesResponse, RateComparison } from '@/types';
+import { useState, useCallback, useEffect, useRef } from 'react';
 
 async function fetcher([, corridorId, amount]: [string, string, string]): Promise<RateComparison> {
-  const url = new URL("/api/rates", window.location.origin);
-  url.searchParams.set("corridor", corridorId);
-  url.searchParams.set("amount", amount);
+  const url = new URL('/api/rates', window.location.origin);
+  url.searchParams.set('corridor', corridorId);
+  url.searchParams.set('amount', amount);
 
   const res = await fetch(url.toString());
 
@@ -33,7 +18,6 @@ async function fetcher([, corridorId, amount]: [string, string, string]): Promis
   return data.rates;
 }
 
-
 export interface UseAnchorRatesResult {
   rates: RateComparison | undefined;
   isLoading: boolean;
@@ -44,11 +28,7 @@ export interface UseAnchorRatesResult {
   resumeRefresh: () => void;
 }
 
-
-export function useAnchorRates(
-  corridorId: string,
-  amount: string
-): UseAnchorRatesResult {
+export function useAnchorRates(corridorId: string, amount: string): UseAnchorRatesResult {
   const [refreshInflight, setRefreshInflight] = useState(false);
   const [refreshPaused, setRefreshPaused] = useState(false);
   const refreshPausedRef = useRef(refreshPaused);
@@ -63,30 +43,12 @@ export function useAnchorRates(
     setRefreshPaused(false);
   }, []);
 
-  const refreshControlRef = useRef<RefreshControl>({
-    pauseRefresh,
-    resumeRefresh,
-  });
-
   useEffect(() => {
     refreshPausedRef.current = refreshPaused;
   }, [refreshPaused]);
 
-  useEffect(() => {
-    activeRefreshControl = refreshControlRef.current;
-
-    return () => {
-      if (activeRefreshControl === refreshControlRef.current) {
-        activeRefreshControl = null;
-      }
-    };
-  }, []);
-
-  const { data, error, isLoading, mutate } = useSWR<
-    RateComparison,
-    Error
-  >(
-    corridorId && amount ? ["/api/rates", corridorId, amount] : null,
+  const { data, error, isLoading, mutate } = useSWR<RateComparison, Error>(
+    corridorId && amount ? ['/api/rates', corridorId, amount] : null,
     fetcher,
     {
       refreshInterval: refreshPaused ? 0 : 30_000,

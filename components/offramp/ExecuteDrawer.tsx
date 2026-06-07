@@ -6,7 +6,6 @@ import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
 import { KycIframe } from './KycIframe';
-import { pauseAnchorRatesRefresh, resumeAnchorRatesRefresh } from '@/hooks/useAnchorRates';
 
 // ─── Step definitions ─────────────────────────────────────────────────────────
 
@@ -30,11 +29,21 @@ interface ExecuteDrawerProps {
   onClose: () => void;
   /** Called once the Stellar payment is submitted; closes the drawer and hands tracking data to the page. */
   onExecuteStarted: (transactionId: string, transferServer: string, jwt: string) => void;
+  onOpen: () => void;
+  onAfterClose: () => void;
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
-export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStarted }: ExecuteDrawerProps) {
+export function ExecuteDrawer({
+  rate,
+  amount,
+  publicKey,
+  onClose,
+  onExecuteStarted,
+  onOpen,
+  onAfterClose,
+}: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
@@ -64,11 +73,11 @@ export function ExecuteDrawer({ rate, amount, publicKey, onClose, onExecuteStart
   useEffect(() => {
     if (!isOpen) return;
 
-    pauseAnchorRatesRefresh();
+    onOpen();
     return () => {
-      resumeAnchorRatesRefresh();
+      onAfterClose();
     };
-  }, [isOpen]);
+  }, [isOpen, onOpen, onAfterClose]);
 
   async function handleExecute() {
     if (!rate) return;
