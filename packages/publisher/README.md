@@ -14,7 +14,9 @@ Intel's permission.
 `runBatch` (`src/batch.ts`) does the full tick:
 
 1. `fetchPendingOutcomes` — reads reconciled-but-unpublished rows from the
-   `reputation_outcomes` table.
+   `outcome_log` table (the same table the main app's reputation store
+   writes to — see `lib/reputation/postgres.ts`), filtered to
+   `reconciled_at IS NOT NULL AND published_at IS NULL`.
 2. `submitToOracle` — builds a `submit_outcome` invocation per row via
    [`@stellar/stellar-sdk`](https://www.npmjs.com/package/@stellar/stellar-sdk)'s
    contract client, signs with the publisher key, and submits it.

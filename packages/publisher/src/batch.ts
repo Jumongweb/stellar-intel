@@ -47,7 +47,7 @@ export async function fetchPendingOutcomes(
        settle_seconds,
        quoted_rate,
        delivered_rate
-     FROM reputation_outcomes
+     FROM outcome_log
      WHERE published_at IS NULL
        AND reconciled_at IS NOT NULL
      ORDER BY reconciled_at ASC
@@ -74,7 +74,7 @@ export async function markPublished(
   if (intentHashes.length === 0) return;
   const placeholders = intentHashes.map((_, i) => `$${i + 2}`).join(', ');
   await executor(
-    `UPDATE reputation_outcomes
+    `UPDATE outcome_log
        SET published_at = NOW(), oracle_tx_hash = $1
      WHERE intent_hash IN (${placeholders})`,
     [txHash, ...intentHashes]
