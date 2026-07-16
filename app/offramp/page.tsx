@@ -189,6 +189,7 @@ function OfframpContent() {
           error={error}
           onSelectAnchor={handleSelectAnchor}
           executeDisabled={network !== 'PUBLIC'}
+          onRefresh={() => mutate()}
         />
       </div>
 

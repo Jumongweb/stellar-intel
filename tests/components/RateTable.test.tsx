@@ -78,7 +78,15 @@ describe('RateTable', () => {
     render(
       <RateTable rates={emptyRates} isLoading={false} error={undefined} onSelectAnchor={vi.fn()} />
     );
-    expect(screen.getByText('No rates available for this corridor.')).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        (_, node) => node?.textContent === 'No rates available for USDC→NGN right now.'
+      )
+    ).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Try another corridor' })).toHaveAttribute(
+      'href',
+      '#corridor-select'
+    );
   });
 
   it('renders an unavailable row for each anchorError', () => {

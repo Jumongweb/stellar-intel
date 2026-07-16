@@ -15,6 +15,8 @@ interface RateTableProps {
   /** Disables the off-ramp action (e.g. when the wallet is not on mainnet). */
   executeDisabled?: boolean;
   anchorErrors?: AnchorRateError[];
+  /** Re-fetches rates for the current corridor; shown as a CTA on the empty state. */
+  onRefresh?: () => void;
 }
 
 export function RateTable({
@@ -25,6 +27,7 @@ export function RateTable({
   error,
   onSelectAnchor,
   executeDisabled,
+  onRefresh,
 }: RateTableProps) {
   const [expiredAnchorIds, setExpiredAnchorIds] = useState<Set<string>>(new Set());
 
@@ -115,8 +118,32 @@ export function RateTable({
             anchorErrors.length === 0 &&
             (!rates.pending || rates.pending.length === 0) && (
               <tr>
-                <td colSpan={5} className="px-4 py-8 text-center text-sm text-gray-500">
-                  No rates available for this corridor.
+                <td colSpan={5} className="px-4 py-10 text-center">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    No rates available
+                    {sourceCurrency && destCurrency
+                      ? ` for ${sourceCurrency.toUpperCase()}→${destCurrency.toUpperCase()} right now.`
+                      : ' for this corridor right now.'}
+                  </p>
+                  <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                    Anchors may be temporarily unavailable. Rates refresh every 30 seconds.
+                  </p>
+                  <div className="mt-4 flex items-center justify-center gap-3">
+                    <a
+                      href="#corridor-select"
+                      className="text-xs font-medium text-blue-600 underline hover:text-blue-700 dark:text-blue-400"
+                    >
+                      Try another corridor
+                    </a>
+                    {onRefresh && (
+                      <button
+                        onClick={onRefresh}
+                        className="rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-medium text-gray-700 hover:bg-gray-50 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-800"
+                      >
+                        Refresh now
+                      </button>
+                    )}
+                  </div>
                 </td>
               </tr>
             )}
