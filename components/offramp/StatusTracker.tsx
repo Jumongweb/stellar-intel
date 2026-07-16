@@ -1,5 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1';
@@ -99,6 +100,7 @@ export function StatusTracker({
   error,
   anchorHomeDomain,
   onDisputeOpen,
+  onAdjust,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
   const isCompleted = status === 'completed';
@@ -343,6 +345,25 @@ export function StatusTracker({
       )}
 
       <Timeline status={status} />
+
+      {isCompleted && (
+        <div className="mt-4 flex items-center gap-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          {onAdjust && (
+            <button
+              onClick={onAdjust}
+              className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Off-ramp another amount
+            </button>
+          )}
+          <Link
+            href="/history"
+            className="text-xs font-medium text-gray-500 hover:underline dark:text-gray-400"
+          >
+            View transaction history
+          </Link>
+        </div>
+      )}
 
       {canDispute && onDisputeOpen && (
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">

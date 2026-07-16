@@ -1,5 +1,5 @@
 'use client';
-import { Suspense, useState, useCallback, useEffect } from 'react';
+import { Suspense, useState, useCallback, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { TERMINAL_STATES } from '@/lib/stellar/sep24';
@@ -132,6 +132,17 @@ function OfframpContent() {
     }
   }, [withdrawStatus.status, trackingNonce, router]);
 
+  const rateTableRef = useRef<HTMLDivElement>(null);
+
+  const handleOffRampAnother = useCallback(() => {
+    setTrackingTransactionId(null);
+    setTrackingTransferServer(null);
+    setTrackingJwt(null);
+    setTrackingNonce(null);
+    setTrackingAnchorHomeDomain(null);
+    rateTableRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, []);
+
   return (
     <div className="mx-auto max-w-4xl space-y-6 px-4 py-8">
       <div className="flex items-start justify-between">
@@ -160,7 +171,7 @@ function OfframpContent() {
         </div>
       )}
 
-      <div>
+      <div ref={rateTableRef}>
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-300">
             Available Rates
@@ -216,6 +227,7 @@ function OfframpContent() {
           refunds={withdrawStatus.refunds}
           isLoading={withdrawStatus.isLoading}
           error={withdrawStatus.error}
+          onAdjust={handleOffRampAnother}
         />
       )}
 

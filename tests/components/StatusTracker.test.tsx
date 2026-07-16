@@ -96,7 +96,7 @@ describe('StatusTracker', () => {
   it('renders a stellar.expert link when stellarTransactionId is a valid 64-char hex', () => {
     const txId = 'aabbccddeeff00112233445566778899aabbccddeeff00112233445566778899';
     render(<StatusTracker {...BASE_PROPS} status="completed" stellarTransactionId={txId} />);
-    const link = screen.getByRole('link');
+    const link = screen.getByRole('link', { name: /view transaction .* on stellar expert/i });
     expect(link).toHaveAttribute('href', `https://api.stellar.expert/explorer/public/tx/${txId}`);
     expect(link).toHaveAttribute('target', '_blank');
     expect(link).toHaveAttribute('rel', 'noopener noreferrer');
@@ -111,7 +111,9 @@ describe('StatusTracker', () => {
         stellarTransactionId="abc123def456789012345678"
       />
     );
-    expect(screen.queryByRole('link')).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole('link', { name: /view transaction .* on stellar expert/i })
+    ).not.toBeInTheDocument();
   });
 
   it('shows "Live" indicator when status is not terminal', () => {
@@ -164,6 +166,31 @@ describe('StatusTracker', () => {
   it('shows a distinct message for the expired status', () => {
     render(<StatusTracker {...BASE_PROPS} status="expired" />);
     expect(screen.getByText(/expired before settlement/i)).toBeInTheDocument();
+  });
+
+  it('shows "Off-ramp another amount" and "View transaction history" when completed', () => {
+    const onAdjust = vi.fn();
+    render(<StatusTracker {...BASE_PROPS} status="completed" onAdjust={onAdjust} />);
+
+    const historyLink = screen.getByRole('link', { name: 'View transaction history' });
+    expect(historyLink).toHaveAttribute('href', '/history');
+
+    const adjustButton = screen.getByRole('button', { name: 'Off-ramp another amount' });
+    adjustButton.click();
+    expect(onAdjust).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not show "Off-ramp another amount" without an onAdjust handler', () => {
+    render(<StatusTracker {...BASE_PROPS} status="completed" />);
+    expect(
+      screen.queryByRole('button', { name: 'Off-ramp another amount' })
+    ).not.toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'View transaction history' })).toBeInTheDocument();
+  });
+
+  it('does not show completion CTAs for a non-completed status', () => {
+    render(<StatusTracker {...BASE_PROPS} status="pending_anchor" onAdjust={vi.fn()} />);
+    expect(screen.queryByText('View transaction history')).not.toBeInTheDocument();
   });
 
   it('shows no terminal-error message for a non-error status', () => {
