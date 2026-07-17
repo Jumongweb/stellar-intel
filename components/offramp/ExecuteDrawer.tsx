@@ -6,6 +6,7 @@ import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import { measureClient } from '@/lib/metrics';
 import { stepTimeEstimate } from '@/lib/stellar/step-estimates';
+import { classifyExecuteError } from '@/lib/errors/messages';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { KycIframe } from './KycIframe';
@@ -321,7 +322,7 @@ function ExecuteDrawerContent({
         return;
       }
 
-      setErrorMsg(message);
+      setErrorMsg(classifyExecuteError(err));
       setStep('error');
     } finally {
       // Ensure refs are cleaned up even on unexpected throws.
