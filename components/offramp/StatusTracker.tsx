@@ -1,11 +1,19 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
+import Link from 'next/link';
 import type { WithdrawStatusValue, Sep24Transaction } from '@/types';
 import { formatDeliveredAmount } from '@/lib/format';
 import { resolveAnchorSupportHref, resolveToml } from '@/lib/stellar/sep1';
+import {
+  terminalErrorMessage,
+  statusExplainer,
+  statusTimeEstimate,
+} from '@/lib/stellar/status-messages';
 import { Timeline } from './Timeline';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import { CopyButton } from '@/components/ui/CopyButton';
+import { useShare } from '@/hooks/useShare';
+import { TransactionReceipt } from './TransactionReceipt';
 
 const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000;
 
@@ -24,6 +32,8 @@ interface StatusTrackerProps {
   refunds?: Sep24Transaction['refunds'];
   isLoading: boolean;
   error: string | undefined;
+  /** Successful poll count for the current transaction; drives the "still checking" counter. */
+  attemptCount?: number;
   /** Anchor home domain for SEP-1 support contact lookup. */
   anchorHomeDomain?: string;
   onRetryAnchor?: () => void;
@@ -96,12 +106,16 @@ export function StatusTracker({
   refunds,
   isLoading,
   error,
+  attemptCount = 0,
   anchorHomeDomain,
   onDisputeOpen,
+  onAdjust,
 }: StatusTrackerProps) {
   const isTerminal = status ? TERMINAL.includes(status) : false;
   const isCompleted = status === 'completed';
   const canDispute = isTerminal && status != null && DISPUTABLE.includes(status);
+  const terminalMessage = status ? terminalErrorMessage(status, transactionId) : null;
+  const { share, copied: shareCopied } = useShare();
 
   const [anchorSupportUrl, setAnchorSupportUrl] = useState<string | null>(null);
   const pendingAnchorSinceRef = useRef<number | null>(null);
@@ -194,9 +208,44 @@ export function StatusTracker({
         </span>
       </div>
 
+      {status && statusExplainer(status) && (
+        <p className="-mt-3 mb-4 text-xs text-gray-500 dark:text-gray-400">
+          {statusExplainer(status)}
+          {statusTimeEstimate(status) && (
+            <span className="text-gray-400 dark:text-gray-500">
+              {' '}
+              (usually {statusTimeEstimate(status)})
+            </span>
+          )}
+        </p>
+      )}
+
+      {!isTerminal && attemptCount >= 20 && (
+        <p className="mb-4 text-xs text-amber-600 dark:text-amber-400">
+          This is taking longer than usual. Anchor may be experiencing delays.
+        </p>
+      )}
+      {!isTerminal && attemptCount >= 5 && attemptCount < 20 && (
+        <p className="mb-4 text-xs text-gray-400 dark:text-gray-500">
+          (checked {attemptCount} times, still waiting...)
+        </p>
+      )}
+
       {error && (
         <p className="mb-4 rounded-lg bg-red-50 px-3 py-2 text-xs text-red-600 dark:bg-red-950/30 dark:text-red-400">
           {error}
+        </p>
+      )}
+
+      {terminalMessage && (
+        <p
+          className={`mb-4 rounded-lg px-3 py-2 text-xs ${
+            status === 'refunded'
+              ? 'bg-yellow-50 text-yellow-800 dark:bg-yellow-950/30 dark:text-yellow-300'
+              : 'bg-red-50 text-red-600 dark:bg-red-950/30 dark:text-red-400'
+          }`}
+        >
+          {terminalMessage}
         </p>
       )}
 
@@ -320,6 +369,7 @@ export function StatusTracker({
             href={`${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label={`View transaction ${stellarTransactionId} on Stellar Expert (opens in new tab)`}
             className="font-mono text-blue-600 hover:underline dark:text-blue-400"
           >
             {stellarTransactionId.slice(0, 16)}…
@@ -328,6 +378,58 @@ export function StatusTracker({
       )}
 
       <Timeline status={status} />
+
+      {isCompleted && (
+        <div className="mt-4 flex items-center gap-4 border-t border-gray-100 pt-4 dark:border-gray-800">
+          {onAdjust && (
+            <button
+              onClick={onAdjust}
+              className="text-xs font-medium text-blue-600 hover:underline dark:text-blue-400"
+            >
+              Off-ramp another amount
+            </button>
+          )}
+          <Link
+            href="/history"
+            className="text-xs font-medium text-gray-500 hover:underline dark:text-gray-400"
+          >
+            View transaction history
+          </Link>
+          {amountIn && stellarTransactionId && isValidStellarTxId(stellarTransactionId) && (
+            <button
+              onClick={() =>
+                share({
+                  text: `I just off-ramped ${amountIn} USDC → ${currencyCode} via Stellar Intel.`,
+                  url: `${STELLAR_EXPERT_URL}/tx/${stellarTransactionId}`,
+                })
+              }
+              className="text-xs font-medium text-gray-500 hover:underline dark:text-gray-400"
+            >
+              {shareCopied ? 'Copied!' : 'Share'}
+            </button>
+          )}
+          <button
+            onClick={() => window.print()}
+            className="text-xs font-medium text-gray-500 hover:underline dark:text-gray-400"
+          >
+            Download receipt
+          </button>
+        </div>
+      )}
+
+      {isCompleted && (
+        <TransactionReceipt
+          transactionId={transactionId}
+          amountIn={amountIn}
+          amountInAsset={amountInAsset}
+          amountOut={amountOut}
+          amountOutAsset={amountOutAsset}
+          amountFee={amountFee}
+          currencyCode={currencyCode}
+          stellarTransactionId={stellarTransactionId}
+          anchorHomeDomain={anchorHomeDomain}
+        />
+      )}
 
       {canDispute && onDisputeOpen && (
         <div className="mt-4 pt-4 border-t border-gray-100 dark:border-gray-800">

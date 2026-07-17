@@ -5,6 +5,8 @@ import { initiateWithdraw, getWithdrawTransactionRecord } from '@/lib/stellar/se
 import { getResolvedAnchorById } from '@/lib/stellar/anchors';
 import { buildWithdrawPayment, signAndSubmitPayment } from '@/lib/stellar/horizon';
 import { measureClient } from '@/lib/metrics';
+import { stepTimeEstimate } from '@/lib/stellar/step-estimates';
+import { classifyExecuteError, isRetryableExecuteError } from '@/lib/errors/messages';
 import type { AnchorRate, ExecuteDrawerStep } from '@/types';
 import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { KycIframe } from './KycIframe';
@@ -89,6 +91,7 @@ function ExecuteDrawerContent({
 }: ExecuteDrawerProps) {
   const [step, setStep] = useState<ExecuteDrawerStep>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [errorIsRetryable, setErrorIsRetryable] = useState(true);
   const [txHash, setTxHash] = useState<string | null>(null);
   const [kycUrl, setKycUrl] = useState<string | null>(null);
   const [kycOrigin, setKycOrigin] = useState<string | null>(null);
@@ -115,17 +118,74 @@ function ExecuteDrawerContent({
 
   const isOpen = rate !== null;
 
-  // Handle escape key — prompt confirmation when a flow is in progress.
+  // Focus trap — keeps Tab/Shift+Tab cycling within the open dialog (or the
+  // confirmation dialog on top of it, when shown) and restores focus to
+  // whatever triggered the drawer once it's fully closed.
+  const drawerRef = useRef<HTMLDivElement>(null);
+  const confirmDialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    previouslyFocusedRef.current = document.activeElement as HTMLElement | null;
+    return () => {
+      previouslyFocusedRef.current?.focus();
+    };
+  }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+
+    const container = showConfirmDialog ? confirmDialogRef.current : drawerRef.current;
+
+    const getFocusable = () =>
+      container
+        ? Array.from(
+            container.querySelectorAll<HTMLElement>(
+              'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+            )
+          )
+        : [];
+
+    getFocusable()[0]?.focus();
+
+    const handleTab = (event: KeyboardEvent) => {
+      if (event.key !== 'Tab') return;
+      const focusable = getFocusable();
+      if (focusable.length === 0) return;
+
+      const first = focusable[0]!;
+      const last = focusable[focusable.length - 1]!;
+      const active = document.activeElement;
+
+      if (event.shiftKey && active === first) {
+        event.preventDefault();
+        last.focus();
+      } else if (!event.shiftKey && active === last) {
+        event.preventDefault();
+        first.focus();
+      }
+    };
+
+    window.addEventListener('keydown', handleTab);
+    return () => window.removeEventListener('keydown', handleTab);
+  }, [isOpen, showConfirmDialog]);
+
+  // Handle escape key — close immediately when it's safe to do so (idle/done/
+  // error), otherwise prompt confirmation since a flow is in progress.
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape' && isOpen && !['idle', 'done', 'error'].includes(step)) {
+      if (event.key !== 'Escape' || !isOpen) return;
+      if (['idle', 'done', 'error'].includes(step)) {
+        onClose();
+      } else {
         setShowConfirmDialog(true);
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, step]);
+  }, [isOpen, step, onClose]);
 
   // Lock background scroll while the drawer is open. Pinning <body> with
   // position:fixed (rather than overflow:hidden alone) is what makes the lock
@@ -248,6 +308,7 @@ function ExecuteDrawerContent({
       // "switch network" guidance without retrying the sign.
       if (err instanceof NetworkMismatchError) {
         setErrorMsg(err.message);
+        setErrorIsRetryable(false);
         setStep('error');
         return;
       }
@@ -263,7 +324,8 @@ function ExecuteDrawerContent({
         return;
       }
 
-      setErrorMsg(message);
+      setErrorMsg(classifyExecuteError(err));
+      setErrorIsRetryable(isRetryableExecuteError(err));
       setStep('error');
     } finally {
       // Ensure refs are cleaned up even on unexpected throws.
@@ -277,8 +339,8 @@ function ExecuteDrawerContent({
   // ─── Bottom-sheet swipe-to-dismiss (mobile only) ────────────────────────────
   // CSS-first: these handlers only feed a translateY offset; app/globals.css
   // owns the snap-back animation and disables the transition mid-drag. The grab
-  // handle is hidden at ≥640px (sm:hidden), so this never fires on the desktop
-  // side-panel layout.
+  // handle is hidden at ≥1024px (lg:hidden), so this never fires on the desktop
+  // centered-modal layout.
   const handleSwipeStart = (event: ReactTouchEvent) => {
     const touch = event.touches[0];
     if (!touch) return;
@@ -331,31 +393,38 @@ function ExecuteDrawerContent({
     setShowConfirmDialog(false);
   };
 
+  const handleStartOver = () => {
+    setErrorMsg(null);
+    setStep('idle');
+  };
+
   return (
     <>
-      {/* Backdrop */}
-      {isOpen && (
-        <div
-          className="fixed inset-0 z-40 bg-black/40"
-          onClick={isRunning ? undefined : onClose}
-          aria-hidden="true"
-        />
-      )}
+      {/* Backdrop — always mounted so opening/closing gets a real opacity
+          transition rather than an abrupt mount/unmount. */}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        onClick={isRunning ? undefined : onClose}
+        aria-hidden="true"
+      />
 
       {/* Drawer */}
       <div
+        ref={drawerRef}
         role="dialog"
         aria-modal="true"
         aria-label="Execute off-ramp"
         data-dragging={dragOffset > 0 ? 'true' : undefined}
         style={dragOffset > 0 ? { transform: `translateY(${dragOffset}px)` } : undefined}
-        className={`bottom-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 sm:bottom-auto sm:left-auto sm:right-8 sm:top-1/2 sm:w-96 sm:-translate-y-1/2 sm:rounded-2xl ${
-          isOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-full'
+        className={`bottom-sheet fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 lg:bottom-auto lg:left-1/2 lg:right-auto lg:top-1/2 lg:w-full lg:max-w-[480px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-2xl ${
+          isOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-full'
         }`}
       >
         {/* Grab handle — swipe down to dismiss. Mobile bottom sheet only. */}
         <div
-          className="bottom-sheet-handle flex justify-center pt-3 sm:hidden"
+          className="bottom-sheet-handle flex justify-center pt-3 lg:hidden"
           onTouchStart={handleSwipeStart}
           onTouchMove={handleSwipeMove}
           onTouchEnd={handleSwipeEnd}
@@ -488,10 +557,10 @@ function ExecuteDrawerContent({
               )}
               {step === 'error' && (
                 <button
-                  onClick={handleExecute}
+                  onClick={errorIsRetryable ? handleExecute : handleStartOver}
                   className="w-full rounded-xl bg-blue-600 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-700"
                 >
-                  Try Again
+                  {errorIsRetryable ? 'Retry' : 'Start Over'}
                 </button>
               )}
               {step === 'done' && (
@@ -511,7 +580,13 @@ function ExecuteDrawerContent({
       {showConfirmDialog && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={handleCancelClose} />
-          <div className="relative z-10 mx-4 max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800">
+          <div
+            ref={confirmDialogRef}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Cancel off-ramp?"
+            className="relative z-10 mx-4 max-w-sm rounded-lg bg-white p-6 shadow-xl dark:bg-gray-800"
+          >
             <h3 className="mb-2 text-lg font-semibold text-gray-900 dark:text-white">
               Cancel Off-ramp?
             </h3>
@@ -553,14 +628,19 @@ function ExecuteDrawerErrorFallback({
 }) {
   return (
     <>
-      {isOpen && <div className="fixed inset-0 z-40 bg-black/40" aria-hidden="true" />}
+      <div
+        className={`fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-200 motion-reduce:transition-none ${
+          isOpen ? 'opacity-100' : 'pointer-events-none opacity-0'
+        }`}
+        aria-hidden="true"
+      />
 
       <div
         role="dialog"
         aria-modal="true"
         aria-label="Off-ramp error"
-        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 sm:bottom-auto sm:left-auto sm:right-8 sm:top-1/2 sm:w-96 sm:-translate-y-1/2 sm:rounded-2xl ${
-          isOpen ? 'translate-y-0' : 'translate-y-full sm:translate-y-full'
+        className={`fixed bottom-0 left-0 right-0 z-50 rounded-t-2xl bg-white shadow-2xl transition-transform duration-300 dark:bg-gray-900 lg:bottom-auto lg:left-1/2 lg:right-auto lg:top-1/2 lg:w-full lg:max-w-[480px] lg:-translate-x-1/2 lg:-translate-y-1/2 lg:rounded-2xl ${
+          isOpen ? 'translate-y-0' : 'translate-y-full lg:translate-y-full'
         }`}
       >
         <div className="p-6">
@@ -637,6 +717,9 @@ function StepIndicator({ step }: { step: ExecuteDrawerStep }) {
               }
             >
               {STEP_LABELS[s]}
+              {stepTimeEstimate(s) && (
+                <span className="text-gray-400 dark:text-gray-500"> ({stepTimeEstimate(s)})</span>
+              )}
             </span>
           </li>
         );

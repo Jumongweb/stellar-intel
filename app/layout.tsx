@@ -6,6 +6,7 @@ import { Footer } from '@/components/layout/Footer';
 import { ThemeProvider } from '@/contexts/theme';
 import { BottomNav } from '@/components/layout/BottomNav';
 import { OfflineBar } from '@/components/layout/OfflineBar';
+import { TestnetBanner } from '@/components/layout/TestnetBanner';
 import { WalletProvider } from '@/contexts/WalletContext';
 import { ToastProvider } from '@/contexts/ToastContext';
 import { ToastPortal } from '@/components/ui/Toast';
@@ -54,8 +55,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
           dangerouslySetInnerHTML={{
             __html: `
               (function() {
+                var stored = null;
                 try {
-                  var stored = localStorage.getItem('theme');
+                  stored = localStorage.getItem('theme');
+                } catch(e) {}
+                try {
                   var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
                   if (stored === 'dark' || (!stored && prefersDark)) {
                     document.documentElement.classList.add('dark');
@@ -69,12 +73,21 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <body
         className={`${inter.variable} ${inter.className} flex min-h-screen flex-col bg-background`}
       >
+        <a
+          href="#main-content"
+          className="sr-only focus:not-sr-only focus:absolute focus:top-4 focus:left-4 focus:z-50 focus:rounded focus:bg-white focus:px-4 focus:py-2 focus:text-black"
+        >
+          Skip to content
+        </a>
         <ThemeProvider>
           <WalletProvider>
             <ToastProvider>
+              <TestnetBanner />
               <OfflineBar />
               <Header />
-              <main className="mx-auto max-w-7xl px-4 py-8">{children}</main>
+              <main id="main-content" className="mx-auto max-w-7xl px-4 py-8">
+                {children}
+              </main>
               <Footer />
               <BottomNav />
               <ToastPortal />
