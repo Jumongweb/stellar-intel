@@ -210,6 +210,7 @@ function OfframpContent() {
           onChange={setAmount}
           balance={balance}
           isBalanceLoading={isBalanceLoading}
+          corridorId={corridorId}
         />
       </div>
 

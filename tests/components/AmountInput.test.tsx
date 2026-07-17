@@ -68,6 +68,20 @@ describe('AmountInput', () => {
     render(<AmountInput value="10" onChange={vi.fn()} balance={0} />);
     expect(screen.queryByRole('button', { name: 'Max' })).not.toBeInTheDocument();
   });
+
+  it('shows corridor-specific amount chips when defined', () => {
+    render(<AmountInput value="10" onChange={vi.fn()} corridorId="usdc-mxn" />);
+    expect(screen.getByRole('button', { name: '$100' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '$300' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '$500' })).toBeInTheDocument();
+  });
+
+  it('falls back to default chips for a corridor with no typical amounts defined', () => {
+    render(<AmountInput value="10" onChange={vi.fn()} corridorId="not-a-real-corridor" />);
+    expect(screen.getByRole('button', { name: '$50' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '$100' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: '$500' })).toBeInTheDocument();
+  });
 });
 
 describe('CorridorSelector', () => {

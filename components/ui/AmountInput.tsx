@@ -1,9 +1,10 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
+import { TYPICAL_AMOUNTS } from '@/constants/anchors';
 
 const POSITIVE_DECIMAL_RE = /^\d*\.?\d{0,7}$/;
 
-const SUGGESTED_AMOUNTS = [50, 100, 500];
+const DEFAULT_SUGGESTED_AMOUNTS = [50, 100, 500];
 
 function formatChipLabel(value: number): string {
   try {
@@ -31,6 +32,8 @@ interface AmountInputProps {
   /** Connected wallet's USDC balance (null = no trustline / not connected). */
   balance?: number | null;
   isBalanceLoading?: boolean;
+  /** Selects corridor-specific "typical amount" chips when defined; falls back to defaults otherwise. */
+  corridorId?: string;
 }
 
 export function AmountInput({
@@ -39,10 +42,13 @@ export function AmountInput({
   disabled,
   balance,
   isBalanceLoading,
+  corridorId,
 }: AmountInputProps) {
   const [raw, setRaw] = useState(value);
   const [error, setError] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const suggestedAmounts = (corridorId && TYPICAL_AMOUNTS[corridorId]) || DEFAULT_SUGGESTED_AMOUNTS;
 
   const numericRaw = Number(raw);
   const insufficient =
@@ -146,7 +152,7 @@ export function AmountInput({
         </p>
       )}
       <div className="mt-2 flex gap-2">
-        {SUGGESTED_AMOUNTS.map((amount) => (
+        {suggestedAmounts.map((amount) => (
           <button
             key={amount}
             type="button"

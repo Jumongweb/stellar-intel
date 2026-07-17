@@ -220,6 +220,25 @@ export const CORRIDORS: Corridor[] = [
  */
 export const V11_CORRIDOR_IDS: ReadonlySet<string> = new Set(['usdc-zar', 'usdc-xof']);
 
+/**
+ * Maintainer-set "typical" USDC amounts per corridor, used to seed the
+ * amount input's quick-select chips. Reasonable round numbers per corridor,
+ * not derived from real transaction volume.
+ */
+export const TYPICAL_AMOUNTS: Record<string, number[]> = {
+  'usdc-ngn': [50, 100, 200],
+  'usdc-kes': [50, 100, 250],
+  'usdc-ghs': [50, 100, 200],
+  'usdc-mxn': [100, 300, 500],
+  'usdc-brl': [100, 250, 500],
+  'usdc-ars': [50, 150, 300],
+  'usdc-pen': [50, 150, 300],
+  'usdc-eur': [100, 300, 500],
+  'brl-brl': [100, 250, 500],
+  'usdc-zar': [50, 150, 300],
+  'usdc-xof': [50, 100, 200],
+};
+
 /** Corridor IDs that at least one anchor in the registry currently serves. */
 const SERVED_CORRIDOR_IDS: ReadonlySet<string> = new Set(
   ANCHORS.flatMap((anchor) => anchor.corridors)
