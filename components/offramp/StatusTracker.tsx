@@ -13,6 +13,7 @@ import { Timeline } from './Timeline';
 import { STELLAR_EXPERT_URL } from '@/constants';
 import { CopyButton } from '@/components/ui/CopyButton';
 import { useShare } from '@/hooks/useShare';
+import { TransactionReceipt } from './TransactionReceipt';
 
 const PENDING_ANCHOR_STALL_MS = 10 * 60 * 1000;
 
@@ -407,7 +408,27 @@ export function StatusTracker({
               {shareCopied ? 'Copied!' : 'Share'}
             </button>
           )}
+          <button
+            onClick={() => window.print()}
+            className="text-xs font-medium text-gray-500 hover:underline dark:text-gray-400"
+          >
+            Download receipt
+          </button>
         </div>
+      )}
+
+      {isCompleted && (
+        <TransactionReceipt
+          transactionId={transactionId}
+          amountIn={amountIn}
+          amountInAsset={amountInAsset}
+          amountOut={amountOut}
+          amountOutAsset={amountOutAsset}
+          amountFee={amountFee}
+          currencyCode={currencyCode}
+          stellarTransactionId={stellarTransactionId}
+          anchorHomeDomain={anchorHomeDomain}
+        />
       )}
 
       {canDispute && onDisputeOpen && (

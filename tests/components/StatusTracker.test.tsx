@@ -75,8 +75,9 @@ describe('StatusTracker', () => {
   it('shows completion celebration banner with localized amount when completed', () => {
     render(<StatusTracker {...BASE_PROPS} status="completed" amountIn="100" amountOut="154840" />);
     expect(screen.getByText('Delivered')).toBeInTheDocument();
-    // The formatted amount should contain the numeric value
-    expect(screen.getByText(/154,840|154840/)).toBeInTheDocument();
+    // The formatted amount should contain the numeric value. Excludes the
+    // hidden print-only receipt, which also renders the raw amount.
+    expect(screen.getByText(/154,840|154840/, { ignore: '.receipt *' })).toBeInTheDocument();
     // The raw amount detail row should not be shown when completed
     expect(screen.queryByText('You receive')).not.toBeInTheDocument();
   });
